@@ -414,7 +414,7 @@ else:
                                            datefmt='%Y-%m-%d %H:%M:%S'))
     handler.setLevel(logging.DEBUG)
     logger.addHandler(handler)
-    log = f'clip_{datetime.today().strftime("%Y-%m-%d_%H:%M:%S")}.log'
+    log = f'chimeras_{datetime.today().strftime("%Y_%m_%d_%H_%M_%S")}.log'
     handler = logging.FileHandler(filename=log, mode='w')
     handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s',
                                            datefmt='%Y-%m-%d %H:%M:%S'))
