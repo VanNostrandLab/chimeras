@@ -7,9 +7,9 @@ Inside chimeras directory, issue the following command to check the usage:
 ```shell
 $ ./chimeras -h
 
-usage: clip [-h] [-o OUTDIR] [-g GENOME] [-r RNA] [-j JOBNAME] 
-            [-e EMAIL] [-s SCHEDULER] [-t TIME] [-m MEMORY] 
-            [-n CORES] [--dry-run] FASTQ [FASTQ ...]
+usage: chimeras [-h] [-o OUTDIR] [-g GENOME] [-r RNA] [-j JOBNAME] 
+                [-e EMAIL] [-s SCHEDULER] [-t TIME] [-m MEMORY] 
+                [-n CORES] [--dry-run] FASTQ [FASTQ ...]
 
 A pipeline designed to identify miRNA-target chimeras.
 

@@ -16,7 +16,7 @@ from datetime import datetime
 import ruffus
 
 
-parser = argparse.ArgumentParser(description=__doc__, prog='clip')
+parser = argparse.ArgumentParser(description=__doc__, prog='chimeras')
 parser.add_argument('FASTQ', type=str, nargs='+',
                     help='Path to one or multiple FASTQ files (separated by space).')
 parser.add_argument('-o', type=str, dest='outdir',
