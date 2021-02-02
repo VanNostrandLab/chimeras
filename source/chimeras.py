@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-A pipeline designed to identify miRNA–target chimeras.
+A pipeline designed to identify miRNA-target chimeras.
 """
 
 import os
