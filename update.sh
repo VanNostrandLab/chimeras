@@ -21,9 +21,9 @@ EOF
 echo "${script}" > "${cwd}/chimeras"
 chmod +x "${cwd}/chimeras"
 
-source_py="${cwd}/source/chimeras.py"
-bin_py="${venv}/bin/chimeras.py"
-sed "s|ENVIRONMENT|${venv}/environment.sh|" "${source_py}" > "${bin_py}"
+cp "${cwd}"/source/*.py "${venv}"/bin/
+sed -i "s|ENVIRONMENT|${venv}/environment.sh|" "${venv}/bin/chimeras.py"
+
 echo "# Successfully install and update chimeras"
 echo "#"
 echo "#    Run ${cwd}/chimeras -h to see the usage."
