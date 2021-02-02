@@ -219,7 +219,7 @@ def reverse_map_mirna(bowtie_index_log, reversed_alignment):
 
 @ruffus.transform(reverse_map_mirna, ruffus.suffix('.alignments.tsv'), '.alignments.filtered.tsv')
 def filter_alignment(alignment, filtered_alignment):
-    cmd = ['python', 'collapse_bowtie_results.py',
+    cmd = ['collapse_bowtie_results.py',
            '--bowtie_align', alignment,
            '--out_file', filtered_alignment]
     logger.debug(f'Filtering alignment {alignment} ...')
@@ -229,7 +229,7 @@ def filter_alignment(alignment, filtered_alignment):
 
 @ruffus.transform(filter_alignment, ruffus.suffix('.alignments.filtered.tsv'), '.chimeric.candidates.fasta')
 def candidate_chimeras(filtered_alignment, candidates_fasta):
-    cmd = ['python', 'find_candidate_chimeric_seqs_from_mir_alignments.py',
+    cmd = ['find_candidate_chimeric_seqs_from_mir_alignments.py',
            '--bowtie_align', filtered_alignment,
            '--fa_file', filtered_alignment.replace('.alignments.filtered.tsv', '.umi.trim.sort.fasta'),
            '--metrics_file', filtered_alignment.replace('.alignments.filtered.tsv', '.chimeric.candidates.metrics'),
