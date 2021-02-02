@@ -16,18 +16,44 @@ from datetime import datetime
 import ruffus
 
 
-logger = logging.getLogger("CHIMERAS")
-logger.setLevel(logging.DEBUG)
-handler = logging.StreamHandler(sys.stderr)
-handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s',
-                                       datefmt='%Y-%m-%d %H:%M:%S'))
-handler.setLevel(logging.DEBUG)
-logger.addHandler(handler)
+parser = argparse.ArgumentParser(description=__doc__, prog='clip')
+parser.add_argument('FASTQ', type=str, nargs='+',
+                    help='Path to one or multiple FASTQ files (separated by space).')
+parser.add_argument('-o', type=str, dest='outdir',
+                    help="Path to the output directory (if not exist, will try to create it first).",
+                    default=os.getcwd())
+parser.add_argument('-g', type=str, dest='genome',
+                    help="Path to STAR genome index directory.")
+parser.add_argument('-r', type=str, dest='rna',
+                    help="Path to mature RNA FASTA file (generated using miRBase and "
+                         "U needs to be replaced by T).")
+parser.add_argument('-j', type=str, dest='jobname',
+                    help="Name of your job, default: chimeras",
+                    default='chimeras')
+parser.add_argument('-e', type=str, dest='email',
+                    help='Email address for notifying you the start, end, and abort of you job.')
+parser.add_argument('-s', type=str, dest='scheduler',
+                    help='Name of the scheduler on your cluster, '
+                         'e.g., PBS (or QSUB) or SBATCH (or SLURM), case insensitive.')
+parser.add_argument('-t', type=int, dest='time',
+                    help='Time (in integer hours) for running your job, default: 4.',
+                    default=4)
+parser.add_argument('-m', type=int, dest='memory',
+                    help='Amount of memory (in GB) for all cores needed for your job, default: 32.',
+                    default=32)
+parser.add_argument('-n', type=int, dest='cores',
+                    help='Number of cores can be used for your job, default: 8.',
+                    default=8)
+parser.add_argument('--dry-run', action='store_true', dest='dry',
+                    help='Print out steps and files involved in each step without actually '
+                         'running the pipeline.')
 
-FASTQS = []
-CORES = 4
-GENOME = '/storage/vannostrand/genomes/hg19/from_yeolab/star_sjdb_encode'
-RNA = '/storage/vannostrand/software/chimeras/data/mature.U.to.T.fa'
+args = parser.parse_args()
+fastqs = [os.path.abspath(fastq) for fastq in args.FASTQ]
+CORES, GENOME, RNA = args.cores, args.genome, args.rna
+
+GENOME = GENOME if GENOME else '/storage/vannostrand/genomes/hg19/from_yeolab/star_sjdb_encode'
+RNA = RNA if RNA else '/storage/vannostrand/software/chimeras/data/mature.U.to.T.fa'
 
 
 def run_cmd(cmd, output_mode='wt', **kwargs):
@@ -64,7 +90,7 @@ def run_cmd(cmd, output_mode='wt', **kwargs):
 
 
 @ruffus.jobs_limit(1)
-@ruffus.transform(FASTQS,
+@ruffus.transform(fastqs,
                   ruffus.formatter(r'.+/(?P<BASENAME>.*).f[ast]*q.gz$'),
                   '{BASENAME[0]}.fastq.gz')
 def soft_link_fastq(fastq, link):
@@ -162,7 +188,7 @@ def cut_adapter(fastq, trimmed_fastq):
     os.unlink(trim_umi_metrics)
 
 
-@ruffus.transform(cut_adapter, ruffus.suffix('.trim.fastq'), '.trim.sorted.fastq')
+@ruffus.transform(cut_adapter, ruffus.suffix('.trim.fastq'), '.trim.sort.fastq')
 def sort_fastq(fastq, sorted_fastq):
     cmd = ['fastq-sort', '--id', fastq, '>', sorted_fastq]
     logger.debug(f'Sorting adapters trimmed fastq for {fastq} ...')
@@ -287,8 +313,8 @@ def dedup_bam(bam, deduped_bam):
            '--random-seed', 1,
            '-I', bam,
            '--method', 'unique',
-           '--output-stats', deduped_bam.replace('.deduped.bam', '.dedup'),
-           '--log', deduped_bam.replace('.deduped.bam', '.dedup.metrics'),
+           '--output-stats', deduped_bam.replace('.dedup.bam', '.dedup'),
+           '--log', deduped_bam.replace('.dedup.bam', '.dedup.metrics'),
            '-S', deduped_bam]
     logger.debug(f'Indexing {os.path.basename(bam)} ...')
     run_cmd(cmd)
@@ -303,7 +329,7 @@ def chimeras(deduped_bam, erich_regions):
     logger.debug(f'Finding chimeric enriched regions for {deduped_bam} completed.')
 
 
-def schedule(scheduler, fastqs, outdir, rna, cores, memory, hours, jobname, email):
+def schedule(scheduler, fastqs, outdir, rna, genome, cores, memory, hours, jobname, email):
     sbatch = """#!/usr/bin/env bash
 
 #SBATCH -n {cores}                  # Number of cores (-n)
@@ -332,16 +358,17 @@ def schedule(scheduler, fastqs, outdir, rna, cores, memory, hours, jobname, emai
 export TMPDIR={tmpdir}
 export TEMP={tmpdir}
 export TMP={tmpdir}
-source CHIMERAS_ENVIRONMENT
-
-echo [$(date +"%m-%d-%Y %H:%M:%S")] "Chimeras start."
 source ENVIRONMENT
 
-chimeras \\
-    -o {outdir} \\
-    -r {rna} \\
+echo [$(date +"%m-%d-%Y %H:%M:%S")] "Start running chimeras."
+
+chimeras \
+    -o {outdir} \
+    -r {rna} \
+    -g {genome} \
+    -n {cores} \
     {fastqs}
-echo [$(date +"%m-%d-%Y %H:%M:%S")] "Chimeras complete."
+echo [$(date +"%m-%d-%Y %H:%M:%S")] "Running chimeras complete."
 """
     if scheduler.upper() in ('PBS', 'QSUB'):
         runtime, directive, exe, mail = f'{hours}:00:00', pbs, 'qsub', pbs_email
@@ -354,7 +381,7 @@ echo [$(date +"%m-%d-%Y %H:%M:%S")] "Chimeras complete."
     if not os.path.isdir(tmpdir):
         os.mkdir(tmpdir)
     data = {'cores': cores, 'runtime': runtime, 'memory': memory, 'jobname': jobname, 'fastqs': fastqs,
-            'outdir': outdir, 'tmpdir': tmpdir, 'rna': rna, 'email': email}
+            'outdir': outdir, 'tmpdir': tmpdir, 'rna': rna, 'genome': genome, 'email': email}
     text = [directive, mail, code] if email else [directive, code]
     text = ''.join(text).format(**data)
     
@@ -372,75 +399,36 @@ echo [$(date +"%m-%d-%Y %H:%M:%S")] "Chimeras complete."
         print(f'{k:>20} {v}')
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, prog='clip')
-    parser.add_argument('FASTQ', type=str, nargs='+',
-                        help='Path to one or multiple FASTQ files (separated by space).')
-    parser.add_argument('-o', type=str, dest='outdir',
-                        help="Path to the output directory (if not exist, will try to create it first).",
-                        default=os.getcwd())
-    parser.add_argument('-g', type=str, dest='genome',
-                        help="Path to STAR genome index directory.")
-    parser.add_argument('-r', type=str, dest='rna',
-                        help="Path to mature RNA FASTA file (generated using miRBase and "
-                             "U needs to be replaced by T).")
-    parser.add_argument('-j', type=str, dest='jobname',
-                        help="Name of your job, default: chimeras",
-                        default='eCLIP')
-    parser.add_argument('-e', type=str, dest='email',
-                        help='Email address for notifying you the start, end, and abort of you job.')
-    parser.add_argument('-s', type=str, dest='scheduler',
-                        help='Name of the scheduler on your cluster, '
-                             'e.g., PBS (or QSUB) or SBATCH (or SLURM), case insensitive.')
-    parser.add_argument('-t', type=int, dest='time',
-                        help='Time (in integer hours) for running your job, default: 4.',
-                        default=4)
-    parser.add_argument('-m', type=int, dest='memory',
-                        help='Amount of memory (in GB) for all cores needed for your job, default: 32.',
-                        default=32)
-    parser.add_argument('-n', type=int, dest='cores',
-                        help='Number of cores can be used for your job, default: 8.',
-                        default=8)
-    parser.add_argument('--dry-run', action='store_true', dest='dry',
-                        help='Print out steps and files involved in each step without actually '
-                             'running the pipeline.')
+if args.dry:
+    ruffus.pipeline_printout(verbose=9)
+else:
+    outdir = args.outdir
+    if not os.path.exists(outdir):
+        os.mkdir(outdir)
+    os.chdir(outdir)
     
-    args = parser.parse_args()
-    global FASTQS
-    FASTQS = [os.path.abspath(fastq) for fastq in args.FASTQ]
-    if args.dry:
-        ruffus.pipeline_printout()
+    logger = logging.getLogger("CHIMERAS")
+    logger.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s',
+                                           datefmt='%Y-%m-%d %H:%M:%S'))
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+    log = f'clip_{datetime.today().strftime("%Y-%m-%d_%H:%M:%S")}.log'
+    handler = logging.FileHandler(filename=log, mode='w')
+    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s',
+                                           datefmt='%Y-%m-%d %H:%M:%S'))
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+    
+    scheduler = args.scheduler
+    if scheduler:
+        fastqs = ' \\\n    '.join(fastqs)
+        schedule(scheduler, fastqs, outdir, RNA, GENOME,
+                 CORES, args.memory, args.time, args.jobname, args.email)
     else:
-        outdir = args.outdir
-        if not os.path.exists(outdir):
-            os.mkdir(outdir)
-        os.chdir(outdir)
-    
-        global logger
-        log = f'clip_{datetime.today().strftime("%Y-%m-%d_%H:%M:%S")}.log'
-        handler = logging.FileHandler(filename=log, mode='w')
-        handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s',
-                                               datefmt='%Y-%m-%d %H:%M:%S'))
-        handler.setLevel(logging.DEBUG)
-        logger.addHandler(handler)
-    
-        global CORES
-        CORES = args.cores if args.cores else CORES
-        
-        global GENOME
-        GENOME = args.genome if args.genome else GENOME
-        
-        global RNA
-        GENOME = args.genome if args.genome else GENOME
-        
-        scheduler = args.scheduler
-        if scheduler:
-            fastqs = ' \\\n    '.join(args.fastqs)
-            schedule(scheduler, fastqs, outdir, args.rna,
-                     args.cores, args.memory, args.time, args.jobname, args.email)
-        else:
-            ruffus.pipeline_run(multiprocess=CORES, verbose=1)
+        ruffus.pipeline_run(multiprocess=CORES, verbose=1)
 
 
 if __name__ == '__main__':
-    main()
+    pass
