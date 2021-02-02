@@ -19,5 +19,4 @@ wget https://github.com/chaolinzhanglab/ctk/archive/v1.1.4.zip
 unzip v1.1.4.zip
 rm v1.1.4.zip
 
-cd "${chimeras}"
-
+"${chimeras}/update.sh"

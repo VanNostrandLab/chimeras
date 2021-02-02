@@ -336,6 +336,8 @@ export TMP={tmpdir}
 source CHIMERAS_ENVIRONMENT
 
 echo [$(date +"%m-%d-%Y %H:%M:%S")] "Chimeras start."
+source ENVIRONMENT
+
 chimeras \\
     -o {outdir} \\
     -r {rna} \\
