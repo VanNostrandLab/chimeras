@@ -64,7 +64,6 @@ def run_cmd(cmd, output_mode='wt', **kwargs):
 
 
 @ruffus.jobs_limit(1)
-@ruffus.follows(ruffus.mkdir('logs', 'data', 'results', 'scripts'))
 @ruffus.transform(FASTQS,
                   ruffus.formatter(r'.+/(?P<BASENAME>.*).f[ast]*q.gz$'),
                   '{BASENAME[0]}.fastq.gz')
