@@ -362,7 +362,7 @@ source ENVIRONMENT
 
 echo [$(date +"%m-%d-%Y %H:%M:%S")] "Start running chimeras."
 
-chimeras \
+APP \
     -o {outdir} \
     -r {rna} \
     -g {genome} \

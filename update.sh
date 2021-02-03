@@ -23,6 +23,7 @@ chmod +x "${cwd}/chimeras"
 
 cp "${cwd}"/source/*.py "${venv}"/bin/
 sed -i "s|ENVIRONMENT|${venv}/environment.sh|" "${venv}/bin/chimeras.py"
+sed -i "s|APP|${cwd}/chimeras|" "${venv}/bin/chimeras.py"
 
 echo "# Successfully install and update chimeras"
 echo "#"
